@@ -1,5 +1,6 @@
 import serial
 import math
+import keyboard
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
@@ -16,7 +17,7 @@ def create_map():
         np.array: Grid map of the environment
     """
     fig, ax = plt.subplots()
-    grid = np.zeros((MAP_SIZE_X, MAP_SIZE_Y))  # Define the size of the grid
+    grid = np.zeros((MAP_SIZE_X_BLOCKS, MAP_SIZE_Y_BLOCKS))  # Define the size of the grid
     drawing = False  # State to check if mouse is pressed
 
     def on_press(event):
@@ -54,8 +55,10 @@ def create_map():
             path = a_star_search(grid, PATH_START, PATH_GOAL)
             if path:
                 # Flip x and y to match the axis when plotting
-                for y, x in path:
-                    ax.add_patch(patches.Rectangle((x, y), 1, 1, color='blue', fill=True))
+                # Plot the first one as red, end as green, and the rest as blue
+                for i, (y, x) in enumerate(path):
+                    color = 'red' if i == 0 else 'green' if i == len(path) - 1 else 'blue'
+                    ax.add_patch(patches.Rectangle((x, y), 1, 1, color=color, fill=True))
                 plt.draw()
                 movements = translate_to_controls(path)
                 send_movements_via_uart(movements)
@@ -87,11 +90,55 @@ def create_map():
     return grid
 
 def heuristic(a, b):
-    """ Calculate the Manhattan distance heuristic for A*. """
+    """Calculate the Manhattan distance heuristic for A*."""
     return abs(b[0] - a[0]) + abs(b[1] - a[1])
 
+def is_valid_turn(grid, current, direction):
+    """
+    Check if a turn is valid based on the current position and direction for an Ackermann vehicle.
+
+    For example, if the vehicle is moving in the top right direction and it is currently on (0,0), the following blocks should be valid:
+    (0,0), (0,1), (1,0), (1,1), (1,2), (2,1), (2,2)
+    """
+    x, y = current
+    dx, dy = direction
+    # Determine squares to check based on direction
+    if dx == -1 and dy == -1:  # top left
+        turn_squares = [
+            (x, y), (x-1, y), (x, y-1), (x-1, y-1),
+            (x-2, y-1), (x-1, y-2), (x-2, y-2)
+        ]
+    elif dx == -1 and dy == 1:  # top right
+        turn_squares = [
+            (x, y), (x-1, y), (x, y+1), (x-1, y+1),
+            (x-2, y+1), (x-1, y+2), (x-2, y+2)
+        ]
+    elif dx == 1 and dy == -1:  # bottom left
+        turn_squares = [
+            (x, y), (x+1, y), (x, y-1), (x+1, y-1),
+            (x+2, y-1), (x+1, y-2), (x+2, y-2)
+        ]
+    elif dx == 1 and dy == 1:  # bottom right
+        turn_squares = [
+            (x, y), (x+1, y), (x, y+1), (x+1, y+1),
+            (x+2, y+1), (x+1, y+2), (x+2, y+2)
+        ]
+    else:  # For orthogonal movements, we check a 1x1 space
+        turn_squares = [(x + dx, y + dy)]
+    
+    for sx, sy in turn_squares:
+        if not (0 <= sx < grid.shape[0] and 0 <= sy < grid.shape[1]):
+            return False
+        if grid[sx, sy] != 0:
+            return False
+    return True
+
 def a_star_search(grid, start, goal):
-    """_summary_
+    """
+    Perform A* search on the grid.
+
+    Note:
+    When there are turns, it has to be 2 blocks away and two blocks in the turning direction for a turn to work
 
     Args:
         grid (np.array): Map of the environment
@@ -101,6 +148,7 @@ def a_star_search(grid, start, goal):
     Returns:
         list: Path from start to goal
     """
+    # Switch positions for start and end coords
     frontier = PriorityQueue()
     frontier.put((0, start))
     came_from = {}
@@ -114,13 +162,18 @@ def a_star_search(grid, start, goal):
         if current == goal:
             break
         
-        # Include diagonal directions
-        movements = [(-1, 0), (1, 0), (0, -1), (0, 1),  # 4 orthogonal movements
-                     (-1, -1), (-1, 1), (1, -1), (1, 1)]  # 4 diagonal movements
+        # Allow movements forward and slight turns
+        movements = [
+            (-1, 0), (1, 0), (0, -1), (0, 1),  # 4 orthogonal movements
+            (-1, -1), (-1, 1), (1, -1), (1, 1)  # 4 diagonal movements
+        ]
         
         for dx, dy in movements:
             neighbor = (current[0] + dx, current[1] + dy)
             if 0 <= neighbor[0] < grid.shape[0] and 0 <= neighbor[1] < grid.shape[1] and grid[neighbor[0], neighbor[1]] == 0:
+                if not is_valid_turn(grid, current, (dx, dy)):
+                    continue
+                
                 # Cost for diagonal movement is sqrt(2), approximated as 1.414
                 step_cost = 1.414 if dx != 0 and dy != 0 else 1
                 new_cost = cost_so_far[current] + step_cost
@@ -157,29 +210,64 @@ def translate_to_controls(path):
     """
     movements = []
     # Assume initial direction is facing 'up' (north)
-    movements = []
-    # Assume initial direction is facing 'up' (north)
-    current_angle = 90  # degrees (north)
+    current_angle = 0  # degrees (north)
     for i in range(1, len(path)):
         dx = path[i][0] - path[i-1][0]
         dy = path[i][1] - path[i-1][1]
         target_angle = math.degrees(math.atan2(dy, dx))  # Calculate target angle based on dy, dx
+
+        print(f"From {path[i-1]} to {path[i]}: dx={dx}, dy={dy}, target_angle={target_angle}")
+        
+        # If angle is larger or smaller than the max and min angles, set it to the max or min angle
         angle_change = target_angle - current_angle  # Calculate change needed
 
         # Calculate distance to travel in meters and then the time needed at constant speed
-        distance = math.sqrt(dx**2 + dy**2) * BLOCKMETERS  # Convert grid distance to meters
-        time_forward = distance / VEH_SPEED  # Time = Distance / Speed
+        distance = math.sqrt(dx**2 + dy**2) * BLOCK_METERS  # Convert grid distance to meters
+
+        # If the angle change is not zero, add the turning time to the forward time
+        time_forward = distance / VEH_SPEED * (TURN_TIME_MULTI if angle_change != 0 else 1)
         
-        movements.append((angle_change, time_forward))  # Append the tuple (angle change, time)
+        movements.append((angle_change + SERVO_DEFAULT_ANGLE, time_forward))  # Append the tuple (angle change, time)
         current_angle = target_angle  # Update current angle to target angle for next calculation
 
+    # Add final statement to stop car
+    movements.append((SERVO_DEFAULT_ANGLE, 0))
+    print("movements", movements)
     return movements
 
+def stop_car(event):
+    """
+    Stop the car by sending a stop command to the ESP32 over UART if "s" is pressed.
+    """
+    global loop_flag
+    if event.name == 's':
+        loop_flag = False
+        print("Stopping the car.")
+
 def send_movements_via_uart(movements):
-    """ Send movements to an ESP32 over UART. """
-    with serial.Serial(USB_PORT, 9600, timeout=1) as ser:
-        for angle, time_forward in movements:
-            command = f"{angle:.2f},{time_forward:.2f}\n"
-            ser.write(command.encode('utf-8'))  # Send command as bytes
-    print(f"Sent {len(movements)} movements to the ESP32.")
+    """ Send movements to an ESP32 over UART, one by one. """
+    try:
+        with serial.Serial(USB_PORT, USB_BAUD_RATE, timeout=5) as ser:  # Increased timeout
+            for angle, time_forward in movements:
+                # Stop the car if the loop flag is set to False
+                if not loop_flag:
+                    ser.write(b"stop\n")
+                    print("Sent stop command to the ESP32.")
+                    break
+
+                command = f"{angle:.2f},{time_forward:.2f}\n"
+                ser.write(command.encode('utf-8'))  # Send command as bytes
+                print(f"Sent: {command.strip()}")
+
+                # Wait for ESP32 to send back an acknowledgment over UART
+                response = ser.readline().decode('utf-8').strip()
+                print(f"Received: {response}")
+                
+                # Check if the acknowledgment is valid (you may need to adapt this based on your ESP32's response format)
+
+        print(f"Sent {len(movements)} movements to the ESP32.")
+    except serial.SerialException as e:
+        print(f"Serial error: {e}")
+    except Exception as e:
+        print(f"Unexpected error: {e}")
 
