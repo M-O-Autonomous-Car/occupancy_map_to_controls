@@ -577,11 +577,20 @@ def send_controls_uart(path) -> None:
 
 def send_one_control_uart(steer_rad: float) -> None:
     # Turn radians into degrees
-    deg_angle = math.degrees(steer_rad) + SERVO_DEFAULT_ANGLE
-    print("Turn to: ", deg_angle)
+    deg_delta = math.degrees(steer_rad)
+    if deg_delta < 0:
+        deg_angle = math.degrees(steer_rad) - ANGLE_MULTIPLIER + SERVO_DEFAULT_ANGLE
+    else:
+        deg_angle = math.degrees(steer_rad) + ANGLE_MULTIPLIER + SERVO_DEFAULT_ANGLE
+
+    if abs(deg_delta) < 10:
+        deg_delta *= 1.5
+
+    forward_time = TURN_INTERVAL if abs(deg_delta) > TURN_THRESHOLD else FORWARD_INTERVAL
+
     try:
         with serial.Serial(USB_PORT, USB_BAUD_RATE, timeout=5) as ser:  # Increased timeout
-            command = f"{deg_angle:.2f},{FORWARD_INTERVAL:.2f}\n"
+            command = f"{deg_angle:.2f},{forward_time:.2f}\n"
             ser.write(command.encode('utf-8'))  # Send command as bytes
             print(f"Sent: {command.strip()}")
 

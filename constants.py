@@ -11,28 +11,31 @@ ALGO_SCALING = 6 # Scaling factor for the algorithm
 
 METER_PER_BLOCK = 0.25 # Number of meters per block
 BLOCK_PER_METER = 1/(METER_PER_BLOCK * ALGO_SCALING) # Number of blocks per meter
-DEGREE_RESOLUTION = 1 # Resolution of the radians
+DEGREE_RESOLUTION = math.radians(1)  # Resolution, angles to radians
 MAP_SIZE_X = 5 # Map size in the x direction in meters
 MAP_SIZE_Y = 5 # Map size in the y direction in meters
 MAP_SIZE_X_BLOCKS = int(math.ceil(MAP_SIZE_X * BLOCK_PER_METER)) # Map size in the x direction
 MAP_SIZE_Y_BLOCKS = int(math.ceil(MAP_SIZE_Y * BLOCK_PER_METER)) # Map size in the y direction
 
 PATH_START = (5, 2) # Start position of the path
-PATH_GOAL = (23, 18) # Goal position of the path
+PATH_GOAL = (20, 18) # Goal position of the path
 PATH_GOAL2 = (5, 18) # Goal position of the path
 ANGLE_START = 0 # Start angle of the path
 ANGLE_GOAL = 90 # Goal angle of the path
-ANGLE_GOAL2 = 180 # Goal angle of the path
-MOVE_REOLUTION = 0.05 # Path interpolate resolution
+ANGLE_GOAL2 = 0 # Goal angle of the path
+MOVE_REOLUTION = 0.8 # Path interpolate resolution
 
 BLOCK_METERS = 0.2 # 1 block = 0.1 meters
 VEH_SPEED = 1 # Vehicle speed in m/s
 TURN_TIME_MULTI = 0.8 # Multiplier for turning time
-FORWARD_INTERVAL = 0.4 # Forward interval in seconds
+FORWARD_INTERVAL = 0.55 # Forward interval in seconds
+TURN_INTERVAL = 0.8 # Turn interval in seconds
+TURN_THRESHOLD = 5 # Turn threshold in degrees
 
 MAX_ANGLE_RIGHT = 135 # Maximum angle to the right
 MAX_ANGLE_LEFT = 45 # Maximum angle to the left
 SERVO_DEFAULT_ANGLE = 90 # Default angle for the servo
+ANGLE_MULTIPLIER = 3 # Multiplier for the angle
 
 RF = 0.27  # [m] distance from rear to vehicle front end of vehicle
 RB = 0  # [m] distance from rear to vehicle back end of vehicle

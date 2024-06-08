@@ -70,6 +70,20 @@ def main_a_star(grid_name="grid3"):
     if not path:
         print("Searching failed!")
         return
+    print("##############################")
+    print("Path found!")
+    print("##############################")
+
+    # Print the path first
+    plt.plot(ox, oy, "sk")
+    plt.plot(path.x, path.y, linewidth=1.5, color='r')
+    plt.title("Hybrid A*")
+    plt.axis("equal")
+    plt.show()
+
+    user_input = input("Press Enter to continue, q to quit:")
+    if user_input == "q":
+        return
 
     x = path.x
     y = path.y
@@ -88,9 +102,13 @@ def main_a_star(grid_name="grid3"):
 
         draw_car(gx, gy, gyaw0, 0.0, 'dimgray')
         draw_car(x[k], y[k], yaw[k], steer)
+        print("x: ", x[k], "y: ", y[k], "yaw: ", yaw[k], "steer: ", math.degrees(steer) * ANGLE_MULTIPLIER)
+        print()
         plt.title("Hybrid A*")
         plt.axis("equal")
         plt.pause(0.0001)
+
+        # input("Press Enter to continue...")
 
         # Send command to the car
         send_one_control_uart(steer)
